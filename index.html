@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Warframe リッチ生成時の武器スルーチェックリスト</title>
+
+<style>
+  body {
+    font-family: sans-serif;
+    padding: 20px;
+    background:#0b0b10;
+    color:#e0e0ff;
+  }
+  h1 { color:#ffd66b; }
+  .tabs { margin-bottom: 10px; }
+  .tab {
+    margin-right: 10px;
+    cursor: pointer;
+    font-weight: bold;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background:#1a1a22;
+    color:#aaa;
+  }
+  .tab.active { color:#fff; background:#3040a0; }
+  hr { border-color:#333; }
+
+  .weapon-item { margin: 4px 0; padding:2px 0; }
+  .weapon-item label { cursor:pointer; }
+
+  .category-tag {
+    display:inline-block;
+    font-size: 0.8em;
+    padding:2px 6px;
+    border-radius:4px;
+    margin-left:6px;
+    background:#222;
+    color:#ccc;
+  }
+  .category-primary { background:#1f3b70; }
+  .category-secondary { background:#70401f; }
+  .category-melee { background:#1f7040; }
+  .category-archgun { background:#704070; }
+
+  input, select, button {
+    margin:4px 0;
+    padding:4px 6px;
+    background:#15151c;
+    color:#e0e0ff;
+    border:1px solid #333;
+    border-radius:4px;
+  }
+  button { cursor:pointer; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+  }
+  th, td {
+    border: 1px solid #444;
+    padding: 6px;
+  }
+  th {
+    background:#222;
+  }
+
+/* ================================
+   スマホ向け UI 最適化
+   ================================ */
+@media (max-width: 600px) {
+
+  body {
+    padding: 12px;
+    font-size: 16px;
+  }
+
+  h1 {
+    font-size: 22px;
+    text-align: center;
+  }
+
+  .tabs {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .tab {
+    width: 100%;
+    text-align: center;
+    padding: 10px;
+    font-size: 18px;
+  }
+
+  button {
+    width: 100%;
+    padding: 10px;
+    font-size: 18px;
+    margin-top: 6px;
+  }
+
+  input, select {
+    width: 100%;
+    font-size: 18px;
+    padding: 10px;
+  }
+
+  table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  th, td {
+    padding: 10px;
+    font-size: 16px;
+  }
+
+  .weapon-item {
+    padding: 10px 0;
+    font-size: 18px;
+  }
+
+  .category-tag {
+    font-size: 14px;
+    padding: 4px 8px;
+  }
+}
+
+
+</style>
+</head>
+<body>
+
+<h1>Warframe リッチ生成時の武器スルーチェックリスト</h1>
+
+<div class="tabs">
+  <span class="tab active" data-tab="kuva">クバ武器</span>
+  <span class="tab" data-tab="sister">Tenet武器</span>
+  <span class="tab" data-tab="manage">武器管理</span>
+  <span class="tab" data-tab="element">属性表</span>
+</div>
+
+<hr>
+
+<div id="controls">
+  <div>
+    並び替え:
+    <button onclick="setSortMode('custom')">カスタム</button>
+    <button onclick="setSortMode('abc')">ABC順</button>
+    <button onclick="setSortMode('category')">カテゴリ順</button>
+  </div>
+
+  <div>
+    フィルター:
+    <button onclick="setFilter('all')">全部</button>
+    <button onclick="setFilter('primary')">プライマリ</button>
+    <button onclick="setFilter('secondary')">セカンダリ</button>
+    <button onclick="setFilter('melee')">近接</button>
+    <button onclick="setFilter('archgun')">AW銃</button>
+  </div>
+</div>
+
+<hr>
+
+<div id="content"></div>
+
+<script>
+// ================================
+// 日付関数（時刻まで記録）
+// ================================
+function getToday() {
+  const d = new Date();
+  const pad = n => n.toString().padStart(2, "0");
+  return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} `
+       + `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+// ================================
+// デフォルト武器
+// ================================
+const defaultKuvaWeapons = [
+  { id:"kuva_bramma", name:"Kuva Bramma", category:"primary" },
+  { id:"kuva_chakkhurr", name:"Kuva Chakkhurr", category:"primary" },
+  { id:"kuva_drakgoon", name:"Kuva Drakgoon", category:"primary" },
+  { id:"kuva_hek", name:"Kuva Hek", category:"primary" },
+  { id:"kuva_hind", name:"Kuva Hind", category:"primary" },
+  { id:"kuva_karak", name:"Kuva Karak", category:"primary" },
+  { id:"kuva_kohm", name:"Kuva Kohm", category:"primary" },
+  { id:"kuva_ogris", name:"Kuva Ogris", category:"primary" },
+  { id:"kuva_quartakk", name:"Kuva Quartakk", category:"primary" },
+  { id:"kuva_sobek", name:"Kuva Sobek", category:"primary" },
+  { id:"kuva_tonkor", name:"Kuva Tonkor", category:"primary" },
+  { id:"kuva_zarr", name:"Kuva Zarr", category:"primary" },
+
+  { id:"kuva_brakk", name:"Kuva Brakk", category:"secondary" },
+  { id:"kuva_kraken", name:"Kuva Kraken", category:"secondary" },
+  { id:"kuva_nukor", name:"Kuva Nukor", category:"secondary" },
+  { id:"kuva_seer", name:"Kuva Seer", category:"secondary" },
+  { id:"kuva_twin_stubbas", name:"Kuva Twin Stubbas", category:"secondary" },
+
+  { id:"kuva_ghoulsaw", name:"Kuva Ghoulsaw", category:"melee" },
+  { id:"kuva_shildeg", name:"Kuva Shildeg", category:"melee" },
+
+  { id:"kuva_ayanga", name:"Kuva Ayanga", category:"archgun" },
+  { id:"kuva_grattler", name:"Kuva Grattler", category:"archgun" },
+];
+
+const defaultSisterWeapons = [
+  { id:"tenet_arca_plasmor", name:"Tenet Arca Plasmor", category:"primary" },
+  { id:"tenet_tetra", name:"Tenet Tetra", category:"primary" },
+  { id:"tenet_envoy", name:"Tenet Envoy", category:"primary" },
+  { id:"tenet_flux_rifle", name:"Tenet Flux Rifle", category:"primary" },
+  { id:"tenet_diplos", name:"Tenet Diplos", category:"primary" },
+
+  { id:"tenet_detron", name:"Tenet Detron", category:"secondary" },
+  { id:"tenet_cycron", name:"Tenet Cycron", category:"secondary" },
+  { id:"tenet_spirex", name:"Tenet Spirex", category:"secondary" },
+
+  { id:"tenet_agendus", name:"Tenet Agendus", category:"melee" },
+  { id:"tenet_exec", name:"Tenet Exec", category:"melee" },
+  { id:"tenet_grigori", name:"Tenet Grigori", category:"melee" },
+  { id:"tenet_livia", name:"Tenet Livia", category:"melee" },
+];
+
+// ================================
+// 属性一覧（追加・削除可能）
+// ================================
+let elementList = [
+  "Impact",
+  "Heat",
+  "Cold",
+  "Electricity",
+  "Toxin",
+  "Magnetic",
+  "Radiation"
+];
+
+// ================================
+// フレーム → 属性（画像の表をフルで反映）
+// ================================
+let frameElements = [
+  // 衝撃 (Impact)
+  { frame:"BARUUK",          element:"Impact", note:"" },
+  { frame:"DANTE",           element:"Impact", note:"" },
+  { frame:"GAUSS",           element:"Impact", note:"" },
+  { frame:"GRENDEL",         element:"Impact", note:"" },
+  { frame:"RHINO",           element:"Impact", note:"" },
+  { frame:"SEVAGOTH",        element:"Impact", note:"" },
+  { frame:"SIRIUS & ORION",  element:"Impact", note:"" },
+  { frame:"WUKONG",          element:"Impact", note:"" },
+  { frame:"ZEPHYR",          element:"Impact", note:"" },
+
+  // 火炎 (Heat)
+  { frame:"CHROMA",   element:"Heat", note:"" },
+  { frame:"EMBER",    element:"Heat", note:"" },
+  { frame:"INAROS",   element:"Heat", note:"" },
+  { frame:"JADE",     element:"Heat", note:"" },
+  { frame:"KULLERVO", element:"Heat", note:"" },
+  { frame:"NEZHA",    element:"Heat", note:"" },
+  { frame:"PROTEA",   element:"Heat", note:"" },
+  { frame:"TEMPLE",   element:"Heat", note:"" },
+  { frame:"URIEL",    element:"Heat", note:"" },
+  { frame:"VAUBAN",   element:"Heat", note:"" },
+  { frame:"WISP",     element:"Heat", note:"" },
+
+  // 冷気 (Cold)
+  { frame:"FROST",    element:"Cold", note:"" },
+  { frame:"GARA",     element:"Cold", note:"" },
+  { frame:"HILDRYN",  element:"Cold", note:"" },
+  { frame:"KOUMEI",   element:"Cold", note:"" },
+  { frame:"NARIN",    element:"Cold", note:"" },
+  { frame:"REVENANT", element:"Cold", note:"" },
+  { frame:"TITANIA",  element:"Cold", note:"" },
+  { frame:"TRINITY",  element:"Cold", note:"" },
+  { frame:"STYANAX",  element:"Cold", note:"" },
+
+  // 電気 (Electricity)
+  { frame:"BANSHEE",    element:"Electricity", note:"" },
+  { frame:"CALIBAN",    element:"Electricity", note:"" },
+  { frame:"FOLLIE",     element:"Electricity", note:"" },
+  { frame:"EXCALIBUR",  element:"Electricity", note:"" },
+  { frame:"GYRE",       element:"Electricity", note:"" },
+  { frame:"LIMBO",      element:"Electricity", note:"" },
+  { frame:"NOVA",       element:"Electricity", note:"" },
+  { frame:"VALKYR",     element:"Electricity", note:"" },
+  { frame:"VOLT",       element:"Electricity", note:"" },
+
+  // 毒 (Toxin)
+  { frame:"ATLAS",   element:"Toxin", note:"" },
+  { frame:"DAGATH",  element:"Toxin", note:"" },
+  { frame:"IVARA",   element:"Toxin", note:"" },
+  { frame:"KHORA",   element:"Toxin", note:"" },
+  { frame:"NEKROS",  element:"Toxin", note:"" },
+  { frame:"NIDUS",   element:"Toxin", note:"" },
+  { frame:"NOKKO",   element:"Toxin", note:"" },
+  { frame:"OBERON",  element:"Toxin", note:"" },
+  { frame:"ORAXIA",  element:"Toxin", note:"" },
+  { frame:"SARYN",   element:"Toxin", note:"" },
+
+  // 磁気 (Magnetic)
+  { frame:"CITRINE",  element:"Magnetic", note:"" },
+  { frame:"CYTE-09",  element:"Magnetic", note:"" },
+  { frame:"HARROW",   element:"Magnetic", note:"" },
+  { frame:"HYDROID",  element:"Magnetic", note:"" },
+  { frame:"LAVOS",    element:"Magnetic", note:"" },
+  { frame:"MAG",      element:"Magnetic", note:"" },
+  { frame:"MESA",     element:"Magnetic", note:"" },
+  { frame:"XAKU",     element:"Magnetic", note:"" },
+  { frame:"YARELI",   element:"Magnetic", note:"" },
+
+  // 放射線 (Radiation)
+  { frame:"ASH",      element:"Radiation", note:"" },
+  { frame:"EQUINOX",  element:"Radiation", note:"" },
+  { frame:"GARUDA",   element:"Radiation", note:"" },
+  { frame:"LOKI",     element:"Radiation", note:"" },
+  { frame:"MIRAGE",   element:"Radiation", note:"" },
+  { frame:"NYX",      element:"Radiation", note:"" },
+  { frame:"OCTAVIA",  element:"Radiation", note:"" },
+  { frame:"QORVEX",   element:"Radiation", note:"" },
+  { frame:"VORUNA",   element:"Radiation", note:"" },
+];
+
+// ================================
+// 初期ロード
+// ================================
+function initList(key, defaults) {
+  const saved = localStorage.getItem(key);
+  if (!saved) {
+    localStorage.setItem(key, JSON.stringify(defaults));
+    return defaults;
+  }
+  try {
+    return JSON.parse(saved);
+  } catch {
+    localStorage.setItem(key, JSON.stringify(defaults));
+    return defaults;
+  }
+}
+
+let kuvaWeapons   = initList("kuvaWeapons", defaultKuvaWeapons);
+let sisterWeapons = initList("sisterWeapons", defaultSisterWeapons);
+elementList       = initList("elementList", elementList);
+frameElements     = initList("frameElements", frameElements);
+
+let kuvaChecked   = JSON.parse(localStorage.getItem("kuvaChecked") || "[]");
+let sisterChecked = JSON.parse(localStorage.getItem("sisterChecked") || "[]");
+
+let currentTab = "kuva";
+let sortMode = "custom";
+let filterCategory = "all";
+
+function save() {
+  localStorage.setItem("kuvaWeapons", JSON.stringify(kuvaWeapons));
+  localStorage.setItem("sisterWeapons", JSON.stringify(sisterWeapons));
+  localStorage.setItem("elementList", JSON.stringify(elementList));
+  localStorage.setItem("frameElements", JSON.stringify(frameElements));
+  localStorage.setItem("kuvaChecked", JSON.stringify(kuvaChecked));
+  localStorage.setItem("sisterChecked", JSON.stringify(sisterChecked));
+}
+
+// ================================
+// 並び替え・フィルター処理（武器）
+// ================================
+function setSortMode(mode) {
+  sortMode = mode;
+  render();
+}
+
+function setFilter(cat) {
+  filterCategory = cat;
+  render();
+}
+
+function applyFilter(list) {
+  if (filterCategory === "all") return list;
+  return list.filter(w => w.category === filterCategory);
+}
+
+function sortList(list) {
+  let arr = [...list];
+
+  if (sortMode === "abc") {
+    arr.sort((a,b)=>a.name.localeCompare(b.name));
+  } else if (sortMode === "category") {
+    const order = { primary:1, secondary:2, melee:3, archgun:4 };
+    arr.sort((a,b)=>{
+      const ca = order[a.category] || 99;
+      const cb = order[b.category] || 99;
+      if (ca !== cb) return ca - cb;
+      return a.name.localeCompare(b.name);
+    });
+  }
+  return arr;
+}
+
+// ================================
+// チェック切り替え（チェック時に日時保存）
+// ================================
+function toggle(id, mode) {
+  const arr = mode === "kuva" ? kuvaChecked : sisterChecked;
+  const idx = arr.indexOf(id);
+
+  if (idx >= 0) arr.splice(idx, 1);
+  else arr.push(id);
+
+  if (mode === "kuva") {
+    localStorage.setItem("lastKuvaDate", getToday());
+  }
+  if (mode === "sister") {
+    localStorage.setItem("lastSisterDate", getToday());
+  }
+
+  save();
+  render();
+}
+
+function clearChecks(mode) {
+  if (mode === "kuva") kuvaChecked = [];
+  else sisterChecked = [];
+  save();
+  render();
+}
+
+// ================================
+// 武器追加・削除・並び替え
+// ================================
+function addWeapon(type) {
+  const name = document.getElementById(type === "kuva" ? "kName" : "sName").value.trim();
+  const cat  = document.getElementById(type === "kuva" ? "kCat" : "sCat").value;
+
+  if (!name) return;
+
+  const id = name.toLowerCase().replace(/\s+/g, "_");
+  const obj = { id, name, category: cat };
+
+  if (type === "kuva") kuvaWeapons.push(obj);
+  else sisterWeapons.push(obj);
+
+  save();
+  renderManage();
+}
+
+function deleteWeapon(type, id) {
+  if (type === "kuva") {
+    kuvaWeapons = kuvaWeapons.filter(w => w.id !== id);
+    kuvaChecked = kuvaChecked.filter(c => c !== id);
+  } else {
+    sisterWeapons = sisterWeapons.filter(w => w.id !== id);
+    sisterChecked = sisterChecked.filter(c => c !== id);
+  }
+  save();
+  renderManage();
+}
+
+function moveWeapon(type, index, direction) {
+  const list = type === "kuva" ? kuvaWeapons : sisterWeapons;
+  const newIndex = index + direction;
+
+  if (newIndex < 0 || newIndex >= list.length) return;
+
+  [list[index], list[newIndex]] = [list[newIndex], list[index]];
+  save();
+  renderManage();
+}
+
+// ================================
+// カテゴリ表示
+// ================================
+function categoryLabel(cat) {
+  switch(cat) {
+    case "primary": return "プライマリ";
+    case "secondary": return "セカンダリ";
+    case "melee": return "近接";
+    case "archgun": return "AW銃";
+    default: return cat;
+  }
+}
+
+function categoryClass(cat) {
+  return "category-tag category-" + cat;
+}
+
+// ================================
+// 武器一覧描画
+// ================================
+function renderWeapons(list, mode) {
+  const checkedArr = mode === "kuva" ? kuvaChecked : sisterChecked;
+
+  let filtered = applyFilter(list);
+  let sorted = sortList(filtered);
+
+  let html = "";
+  sorted.forEach(w => {
+    const checked = checkedArr.includes(w.id) ? "checked" : "";
+    html += `
+      <div class="weapon-item">
+        <label>
+          <input type="checkbox" ${checked}
+            onclick="toggle('${w.id}', '${mode}')">
+          ${w.name}
+          <span class="${categoryClass(w.category)}">${categoryLabel(w.category)}</span>
+        </label>
+      </div>
+    `;
+  });
+  return html;
+}
+
+// ================================
+// クバ武器タブ
+// ================================
+function renderKuva() {
+  const last = localStorage.getItem("lastKuvaDate") || "記録なし";
+
+  document.getElementById("content").innerHTML = `
+    <h2>クバ武器</h2>
+    <div>最終操作日時：${last}</div>
+    <button onclick="clearChecks('kuva')">チェック全解除</button>
+    ${renderWeapons(kuvaWeapons, "kuva")}
+  `;
+}
+
+// ================================
+// シスター武器タブ
+// ================================
+function renderSister() {
+  const last = localStorage.getItem("lastSisterDate") || "記録なし";
+
+  document.getElementById("content").innerHTML = `
+    <h2>Tenet武器</h2>
+    <div>最終操作日時：${last}</div>
+    <button onclick="clearChecks('sister')">チェック全解除</button>
+    ${renderWeapons(sisterWeapons, "sister")}
+  `;
+}
+
+// ================================
+// 属性表用グループ化
+// ================================
+function groupByElement() {
+  const map = {};
+  frameElements.forEach(row => {
+    if (!map[row.element]) map[row.element] = [];
+    map[row.element].push(row.frame);
+  });
+  return map;
+}
+
+// ================================
+// 属性表タブ（表示＋フィルター＋管理＋フレーム管理）
+// ================================
+let editingFrameIndex = null;
+let elementFilter = "all";
+
+function renderElementTable() {
+  const grouped = groupByElement();
+
+  let html = `
+    <h2>属性表（表示）</h2>
+
+    属性フィルター：
+    <select id="elementFilterSelect" onchange="onChangeElementFilter()">
+      <option value="all" ${elementFilter === "all" ? "selected" : ""}>全部</option>
+      ${elementList.map(e => `
+        <option value="${e}" ${elementFilter === e ? "selected" : ""}>${e}</option>
+      `).join("")}
+    </select>
+
+    <button onclick="sortElementFramesABC()">フレームABC順</button>
+
+    <table>
+      <tr><th>属性</th><th>フレーム一覧</th></tr>
+  `;
+
+  Object.keys(grouped).sort().forEach(element => {
+    if (!element) return;
+    if (elementFilter !== "all" && elementFilter !== element) return;
+
+    const frames = [...grouped[element]].sort((a,b)=>a.localeCompare(b));
+    html += `
+      <tr>
+        <td>${element}</td>
+        <td>${frames.join(", ")}</td>
+      </tr>
+    `;
+  });
+
+  html += `</table><hr>`;
+
+  // 属性管理
+  html += `
+    <h3>属性管理</h3>
+    <input id="newElementName" placeholder="新しい属性名">
+    <button onclick="addElement()">追加</button>
+
+    <table>
+      <tr><th>属性名</th><th>操作</th></tr>
+  `;
+
+  elementList.forEach(e => {
+    html += `
+      <tr>
+        <td>${e}</td>
+        <td><button onclick="deleteElement('${e}')">削除</button></td>
+      </tr>
+    `;
+  });
+
+  html += `</table><hr>`;
+
+  // フレーム管理
+  html += `
+    <h3>フレーム管理</h3>
+
+    並び替え：
+    <button onclick="sortFrameElements('element')">属性順</button>
+    <button onclick="sortFrameElements('abc')">ABC順</button>
+    <button onclick="sortFrameElements('original')">追加順</button>
+
+    <h4>フレーム追加</h4>
+    <input id="newFrameName" placeholder="フレーム名">
+    <select id="newFrameElement">
+      <option value="">（属性なし）</option>
+      ${elementList.map(e => `<option value="${e}">${e}</option>`).join("")}
+    </select>
+    <input id="newFrameNote" placeholder="備考（任意）">
+    <button onclick="addFrame()">追加</button>
+
+    <table>
+      <tr><th>フレーム</th><th>属性</th><th>備考</th><th>操作</th></tr>
+  `;
+
+  frameElements.forEach((row, i) => {
+    if (editingFrameIndex === i) {
+      html += `
+        <tr>
+          <td><input id="editFrameName" value="${row.frame}"></td>
+          <td>
+            <select id="editFrameElement">
+              <option value="">（属性なし）</option>
+              ${elementList.map(e => `
+                <option value="${e}" ${row.element === e ? "selected" : ""}>${e}</option>
+              `).join("")}
+            </select>
+          </td>
+          <td><input id="editFrameNote" value="${row.note}"></td>
+          <td>
+            <button onclick="saveFrameEdit(${i})">保存</button>
+            <button onclick="cancelFrameEdit()">キャンセル</button>
+          </td>
+        </tr>
+      `;
+    } else {
+      html += `
+        <tr>
+          <td>${row.frame}</td>
+          <td>${row.element || "（なし）"}</td>
+          <td>${row.note}</td>
+          <td>
+            <button onclick="startFrameEdit(${i})">編集</button>
+            <button onclick="deleteFrame(${i})">削除</button>
+          </td>
+        </tr>
+      `;
+    }
+  });
+
+  html += `</table>`;
+
+  document.getElementById("content").innerHTML = html;
+}
+
+function onChangeElementFilter() {
+  const sel = document.getElementById("elementFilterSelect");
+  elementFilter = sel.value;
+  renderElementTable();
+}
+
+function sortElementFramesABC() {
+  renderElementTable();
+}
+
+// 属性管理
+function addElement() {
+  const name = document.getElementById("newElementName").value.trim();
+  if (!name) return;
+
+  elementList.push(name);
+  save();
+  renderElementTable();
+}
+
+function deleteElement(name) {
+  elementList = elementList.filter(e => e !== name);
+
+  frameElements.forEach(row => {
+    if (row.element === name) {
+      row.element = "";
+    }
+  });
+
+  save();
+  renderElementTable();
+}
+
+// フレーム管理
+function addFrame() {
+  const frame = document.getElementById("newFrameName").value.trim();
+  const element = document.getElementById("newFrameElement").value;
+  const note = document.getElementById("newFrameNote").value.trim();
+
+  if (!frame) return;
+
+  frameElements.push({ frame, element, note });
+  save();
+  renderElementTable();
+}
+
+function startFrameEdit(index) {
+  editingFrameIndex = index;
+  renderElementTable();
+}
+
+function cancelFrameEdit() {
+  editingFrameIndex = null;
+  renderElementTable();
+}
+
+function saveFrameEdit(index) {
+  const frame = document.getElementById("editFrameName").value.trim();
+  const element = document.getElementById("editFrameElement").value;
+  const note = document.getElementById("editFrameNote").value.trim();
+
+  frameElements[index] = { frame, element, note };
+  editingFrameIndex = null;
+  save();
+  renderElementTable();
+}
+
+function deleteFrame(index) {
+  frameElements.splice(index, 1);
+  save();
+  renderElementTable();
+}
+
+function sortFrameElements(mode) {
+  if (mode === "element") {
+    frameElements.sort((a,b)=>a.element.localeCompare(b.element));
+  } else if (mode === "abc") {
+    frameElements.sort((a,b)=>a.frame.localeCompare(b.frame));
+  }
+  save();
+  renderElementTable();
+}
+
+// ================================
+// 管理画面（武器管理）
+// ================================
+function renderManage() {
+  document.getElementById("content").innerHTML = `
+    <h2>武器管理</h2>
+
+    <h3>Kuva武器追加</h3>
+    <input id="kName" placeholder="武器名">
+    <select id="kCat">
+      <option value="primary">プライマリ</option>
+      <option value="secondary">セカンダリ</option>
+      <option value="melee">近接</option>
+      <option value="archgun">AW銃</option>
+    </select>
+    <button onclick="addWeapon('kuva')">追加</button>
+
+    <h3>Tenet武器追加</h3>
+    <input id="sName" placeholder="武器名">
+    <select id="sCat">
+      <option value="primary">プライマリ</option>
+      <option value="secondary">セカンダリ</option>
+      <option value="melee">近接</option>
+      <option value="archgun">AW銃</option>
+    </select>
+    <button onclick="addWeapon('sister')">追加</button>
+
+    <hr>
+
+    <h3>Kuva武器一覧</h3>
+    ${kuvaWeapons.map((w, i) => `
+      <div>
+        ${w.name}
+        <span class="${categoryClass(w.category)}">${categoryLabel(w.category)}</span>
+        <button onclick="moveWeapon('kuva', ${i}, -1)">↑</button>
+        <button onclick="moveWeapon('kuva', ${i}, 1)">↓</button>
+        <button onclick="deleteWeapon('kuva','${w.id}')">削除</button>
+      </div>
+    `).join("")}
+
+    <h3>Tenet武器一覧</h3>
+    ${sisterWeapons.map((w, i) => `
+      <div>
+        ${w.name}
+        <span class="${categoryClass(w.category)}">${categoryLabel(w.category)}</span>
+        <button onclick="moveWeapon('sister', ${i}, -1)">↑</button>
+        <button onclick="moveWeapon('sister', ${i}, 1)">↓</button>
+        <button onclick="deleteWeapon('sister','${w.id}')">削除</button>
+      </div>
+    `).join("")}
+  `;
+}
+
+// ================================
+// タブ切り替え
+// ================================
+function setTab(tab) {
+  currentTab = tab;
+
+  document.querySelectorAll(".tab").forEach(t => {
+    t.classList.toggle("active", t.dataset.tab === tab);
+  });
+
+  render();
+}
+
+// ================================
+// タブごとの描画
+// ================================
+function render() {
+  if (currentTab === "kuva") renderKuva();
+  if (currentTab === "sister") renderSister();
+  if (currentTab === "manage") renderManage();
+  if (currentTab === "element") renderElementTable();
+}
+
+// ================================
+// タブクリックイベント
+// ================================
+document.querySelectorAll(".tab").forEach(t => {
+  t.addEventListener("click", () => setTab(t.dataset.tab));
+});
+
+// ================================
+// 初期描画
+// ================================
+render();
+</script>
+
+</body>
+</html>
